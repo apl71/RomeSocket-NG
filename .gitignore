@@ -1,0 +1,44 @@
+# CMake
+/build/
+/build-*/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+Makefile
+compile_commands.json
+CMakeUserPresets.json
+
+# Compiler artifacts
+*.o
+*.obj
+*.a
+*.so
+*.so.*
+*.dylib
+*.dll
+*.exe
+
+# Test / profiling
+Testing/
+*.profraw
+*.profdata
+*.gcda
+*.gcno
+*.log
+
+# Local configuration
+.env
+.env.*
+!.env.example
+
+# Editors / OS
+.DS_Store
+.idea/
+
+# Temporary
+*.swp
+*.swo
+*~
+.cache/
