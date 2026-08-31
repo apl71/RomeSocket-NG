@@ -4,11 +4,21 @@ set(CMAKE_CXX_COMPILER clang++)
 
 project(RomeSocket LANGUAGES CXX)
 
-add_executable(romesocket
-    src/iouring_backend.cpp
+set(ROME_SOURCES
     src/rome_server.cpp
+    src/iouring_backend.cpp
     src/utils.cpp
-    test/echo_server.cpp
+)
+
+set(ROME_HEADERS
+    include/rome_server.hpp
+    include/connection.hpp
+    include/log.hpp
+)
+
+add_library(romesocket
+    ${ROME_SOURCES}
+    ${ROME_HEADERS}
 )
 
 target_include_directories(
@@ -19,3 +29,19 @@ target_include_directories(
 
 target_compile_features(romesocket PRIVATE cxx_std_20)
 target_link_libraries(romesocket PRIVATE uring)
+
+## Echo test server
+
+add_executable(echo_server
+    test/echo_test/echo_server.cpp
+)
+
+target_link_libraries(echo_server
+    PRIVATE
+        romesocket
+)
+
+target_include_directories(echo_server
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
