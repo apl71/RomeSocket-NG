@@ -26,3 +26,9 @@ std::unique_ptr<To> unique_ptr_cast(
         static_cast<To*>(ptr.release())
     );
 }
+
+std::string current_time();
+
+auto start_timing();
+// return time elapsed in milliseconds
+auto end_timing();

@@ -30,6 +30,13 @@ target_include_directories(
 target_compile_features(romesocket PRIVATE cxx_std_20)
 target_link_libraries(romesocket PRIVATE uring)
 
+## basic utilities for client
+
+set(CLINET_SOURCES
+    test/client_utils.cpp
+    src/utils.cpp
+)
+
 ## Echo test server
 
 add_executable(echo_server
@@ -44,4 +51,17 @@ target_link_libraries(echo_server
 target_include_directories(echo_server
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+## Echo test client for benchmark
+
+add_executable(echo_client
+    ${CLINET_SOURCES}
+    test/echo_client.cpp
+)
+
+target_include_directories(echo_client
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        test
 )
