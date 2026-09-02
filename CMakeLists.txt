@@ -32,7 +32,7 @@ target_link_libraries(romesocket PRIVATE uring)
 
 ## basic utilities for client
 
-set(CLINET_SOURCES
+set(CLIENT_SOURCES
     test/client_utils.cpp
     src/utils.cpp
 )
@@ -56,8 +56,8 @@ target_include_directories(echo_server
 ## Echo test client for benchmark
 
 add_executable(echo_client
-    ${CLINET_SOURCES}
-    test/echo_client.cpp
+    ${CLIENT_SOURCES}
+    test/echo_test/benchmark_client.cpp
 )
 
 target_include_directories(echo_client

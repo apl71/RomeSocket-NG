@@ -1,4 +1,5 @@
 #include <chrono>
+#include <format>
 
 #include "utils.hpp"
 
@@ -60,4 +61,40 @@ std::string current_time() {
         tm.tm_sec,
         milliseconds.count()
     );
+}
+
+void TimingRecorder::record(const std::string &name, uint64_t elapsed_ns) {
+    std::lock_guard<std::mutex> lock(_mut);
+    _records.push_back({
+        name,
+        elapsed_ns
+    });
+}
+
+std::vector<TimingRecord> TimingRecorder::get_records() {
+    std::lock_guard<std::mutex> lock(_mut);
+    return _records;
+}
+
+ScopedTimer::ScopedTimer(
+    std::string_view name,
+    TimingRecorder &recorder
+) : _name(name),
+    _recorder(recorder),
+    _start(std::chrono::steady_clock::now()),
+    _canceled(false) {}
+
+ScopedTimer::~ScopedTimer() {
+    auto end = std::chrono::steady_clock::now();
+    auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+        end - _start
+    ).count();
+
+    if (!_canceled) {
+        _recorder.record(std::string(_name), static_cast<uint64_t>(ns));
+    }
+}
+
+void ScopedTimer::cancel() {
+    _canceled = true;
 }

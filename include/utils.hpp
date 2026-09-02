@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <stdexcept>
 #include <memory>
+#include <mutex>
 
 #include <sys/socket.h>
 #include <netdb.h>
@@ -29,6 +30,33 @@ std::unique_ptr<To> unique_ptr_cast(
 
 std::string current_time();
 
-auto start_timing();
-// return time elapsed in milliseconds
-auto end_timing();
+// timing class for benchmark
+struct TimingRecord {
+    std::string name;
+    uint64_t elapsed_ns;
+};
+
+class TimingRecorder {
+private:
+    std::vector<TimingRecord> _records;
+    std::mutex _mut;
+
+public:
+    TimingRecorder() = default;
+    void record(const std::string &name, uint64_t elapsed_ns);
+    std::vector<TimingRecord> get_records();
+};
+
+class ScopedTimer {
+private:
+    std::string_view _name;
+    TimingRecorder &_recorder;
+    std::chrono::steady_clock::time_point _start;
+    bool _canceled;
+
+public:
+    ScopedTimer(std::string_view name, TimingRecorder &recorder);
+    ~ScopedTimer();
+
+    void cancel();
+};
