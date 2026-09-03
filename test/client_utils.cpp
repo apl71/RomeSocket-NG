@@ -1,4 +1,5 @@
 #include <thread>
+#include <numeric>
 
 #include "client_utils.hpp"
 #include "utils.hpp"
@@ -47,8 +48,8 @@ size_t recv_all(int sock, void *data, size_t length) {
     return offset;
 }
 
-void collect_echo_samples(
-    TimingRecorder &records,
+int collect_first_request_latency(
+    TimingRecorder &recorder,
     const std::string &name,
     const std::string &address,
     uint64_t port,
@@ -58,32 +59,57 @@ void collect_echo_samples(
 ) {
     // prepare threads
     std::vector<std::thread> threads;
+    std::vector<TimingRecorder> local_recorders(thread_num);
+    std::vector<int> valid_nums(thread_num, 0);
     for (int i = 0; i < thread_num; i++) {
-        threads.emplace_back([&](){
+        threads.emplace_back([&, thread_id = i](){
             // create buffer for testing
             // TODO: only work for echo server here
             std::vector<char> send_buf(payload_size, 0);
             std::vector<char> recv_buf(payload_size, 0);
+            // write something for validation
+            for (int j = 0; j < payload_size; j++) {
+                send_buf[j] = static_cast<char>(j % 256);
+            }
             // test throughput
-            for (int i = 0; i < test_num; i++) {
-                ScopedTimer timer(name, records);
-                int sock = connect_server(address, port);
-                
-                size_t size = send_all(sock, send_buf.data(), payload_size);
-                if (size != payload_size) {
-                    timer.cancel();
-                    return;
-                }
-                size = recv_all(sock, recv_buf.data(), payload_size);
-                if (size != payload_size) {
-                    timer.cancel();
-                    return;
+            for (int j = 0; j < test_num; j++) {
+                int sock = 0;
+                bool success = true;
+                {
+                    ScopedTimer timer(name, local_recorders[thread_id]);
+                    sock = connect_server(address, port);
+                    
+                    size_t size = send_all(sock, send_buf.data(), payload_size);
+                    if (size != payload_size) {
+                        timer.cancel();
+                        success = false;
+                    }
+                    if (success) {
+                        size = recv_all(sock, recv_buf.data(), payload_size);
+                        if (size != payload_size) {
+                            timer.cancel();
+                            success = false;
+                        }
+                    }
                 }
                 close(sock);
+                // validate
+                if (memcmp(send_buf.data(), recv_buf.data(), payload_size) != 0) {
+                    success = false;
+                }
+                if (success) {
+                    valid_nums[thread_id]++;
+                }
             }
         });
     }
     for (auto &thread: threads) {
         thread.join();
     }
+    for (auto &local_recorder: local_recorders) {
+        for (auto &record: local_recorder.get_records()) {
+            recorder.record(record.name, record.elapsed_ns);
+        }
+    }
+    return std::accumulate(valid_nums.begin(), valid_nums.end(), 0);
 }

@@ -13,8 +13,4 @@ constexpr uint64_t payload_sizes[4] = {
 };
 
 int main() {
-    int sock = connect_server(ADDRESS, PORT);
-    char buffer[payload_sizes[0]] = {0};
-    
-    close(sock);
 }
