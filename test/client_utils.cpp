@@ -1,5 +1,6 @@
 #include <thread>
 #include <numeric>
+#include <barrier>
 
 #include "client_utils.hpp"
 #include "utils.hpp"
@@ -48,68 +49,113 @@ size_t recv_all(int sock, void *data, size_t length) {
     return offset;
 }
 
-int collect_first_request_latency(
-    TimingRecorder &recorder,
-    const std::string &name,
+BenchmarkRun run_benchmark(
+    const BenchmarkConfig &config,
     const std::string &address,
-    uint64_t port,
-    uint64_t payload_size,
-    int thread_num,
-    int test_num
+    uint16_t port
 ) {
+    BenchmarkRun result;
+    switch (config.type) {
+        case BenchmarkType::FIRST_REQUEST_LATENCY:
+            result = collect_first_request_latency(config, address, port);
+            break;
+        default:
+            break;
+    }
+    return result;
+}
+
+BenchmarkRun collect_first_request_latency(
+    const BenchmarkConfig &config,
+    const std::string &address,
+    uint16_t port
+) {
+    BenchmarkRun result;
     // prepare threads
     std::vector<std::thread> threads;
-    std::vector<TimingRecorder> local_recorders(thread_num);
-    std::vector<int> valid_nums(thread_num, 0);
-    for (int i = 0; i < thread_num; i++) {
+    // store work result for a single thread
+    struct alignas(64) WorkerResult {
+        std::vector<uint64_t> timings;
+        uint64_t attempted = 0;
+        uint64_t succeeded = 0;
+        uint64_t payload_bytes = 0;
+    };
+
+    std::vector<WorkerResult> worker_results(config.thread_num);
+    for (auto &r : worker_results) {
+        r.timings.reserve(config.test_num);
+    }
+
+    Stopwatch wall_watch;
+    std::barrier start_barrier(config.thread_num + 1, [&]() {
+        wall_watch.start();
+    });
+    std::barrier end_barrier(config.thread_num + 1, [&]() {
+        result.wall_elapsed_ns = wall_watch.end();
+    });
+
+    for (int i = 0; i < config.thread_num; i++) {
         threads.emplace_back([&, thread_id = i](){
             // create buffer for testing
             // TODO: only work for echo server here
-            std::vector<char> send_buf(payload_size, 0);
-            std::vector<char> recv_buf(payload_size, 0);
-            // write something for validation
-            for (int j = 0; j < payload_size; j++) {
-                send_buf[j] = static_cast<char>(j % 256);
-            }
+            std::vector<char> send_buf(config.payload_size, 0);
+            std::vector<char> recv_buf(config.payload_size, 0);
+            // start here
+            start_barrier.arrive_and_wait();
             // test throughput
-            for (int j = 0; j < test_num; j++) {
+            for (int j = 0; j < config.test_num; j++) {
+                worker_results[thread_id].attempted++;
                 int sock = 0;
-                bool success = true;
-                {
-                    ScopedTimer timer(name, local_recorders[thread_id]);
-                    sock = connect_server(address, port);
-                    
-                    size_t size = send_all(sock, send_buf.data(), payload_size);
-                    if (size != payload_size) {
-                        timer.cancel();
-                        success = false;
-                    }
-                    if (success) {
-                        size = recv_all(sock, recv_buf.data(), payload_size);
-                        if (size != payload_size) {
-                            timer.cancel();
-                            success = false;
-                        }
-                    }
+                Stopwatch watch;
+                watch.start();
+                sock = connect_server(address, port);
+                if (sock < 0) {
+                    continue;
                 }
-                close(sock);
-                // validate
-                if (memcmp(send_buf.data(), recv_buf.data(), payload_size) != 0) {
+                
+                bool success = true;
+
+                size_t size = send_all(sock, send_buf.data(), config.payload_size);
+                if (size != config.payload_size) {
                     success = false;
                 }
                 if (success) {
-                    valid_nums[thread_id]++;
+                    size = recv_all(sock, recv_buf.data(), config.payload_size);
+                    if (size != config.payload_size) {
+                        success = false;
+                    }
                 }
+
+                if (success) {
+                    auto elapsed_ns = watch.end();
+                    worker_results[thread_id].succeeded++;
+                    worker_results[thread_id].payload_bytes += config.payload_size;
+                    worker_results[thread_id].timings.push_back(elapsed_ns);
+                }
+
+                close(sock);
             }
+            // end timing
+            end_barrier.arrive_and_wait();
         });
     }
+
+    start_barrier.arrive_and_wait();
+
+    end_barrier.arrive_and_wait();
+
     for (auto &thread: threads) {
         thread.join();
     }
-    for (auto &local_recorder: local_recorders) {
-        for (auto &record: local_recorder.get_records()) {
-            recorder.record(record.name, record.elapsed_ns);
+
+    for (size_t i = 0; i < config.thread_num; i++) {
+        for (auto &record: worker_results[i].timings) {
+            result.time_recorder_ns.push_back(record);
         }
+        result.attempted     += worker_results[i].attempted;
+        result.succeeded     += worker_results[i].succeeded;
+        result.payload_bytes += worker_results[i].payload_bytes;
     }
-    return std::accumulate(valid_nums.begin(), valid_nums.end(), 0);
+    result.config = config;
+    return result;
 }

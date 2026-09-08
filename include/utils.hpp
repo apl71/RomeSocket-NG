@@ -30,33 +30,13 @@ std::unique_ptr<To> unique_ptr_cast(
 
 std::string current_time();
 
-// timing class for benchmark
-struct TimingRecord {
-    std::string name;
-    uint64_t elapsed_ns;
-};
-
-class TimingRecorder {
+class Stopwatch {
 private:
-    std::vector<TimingRecord> _records;
-    std::mutex _mut;
-
-public:
-    TimingRecorder() = default;
-    void record(const std::string &name, uint64_t elapsed_ns);
-    std::vector<TimingRecord> get_records();
-};
-
-class ScopedTimer {
-private:
-    std::string_view _name;
-    TimingRecorder &_recorder;
     std::chrono::steady_clock::time_point _start;
-    bool _canceled;
 
 public:
-    ScopedTimer(std::string_view name, TimingRecorder &recorder);
-    ~ScopedTimer();
+    Stopwatch() = default;
 
-    void cancel();
+    void start();
+    uint64_t end();
 };
